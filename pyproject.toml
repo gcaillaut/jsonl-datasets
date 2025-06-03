@@ -1,0 +1,29 @@
+[project]
+name = "jsonl-datasets"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Gaëtan Caillaut", email = "gaetan.caillaut@linguacustodia.com" }
+]
+requires-python = ">=3.11"
+dependencies = [
+    "orjson>=3.10.18",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.0",
+]
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "-ra -q"
+testpaths = [
+    "tests",
+]
+pythonpath = ["src"]
