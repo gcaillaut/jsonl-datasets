@@ -28,19 +28,27 @@ _SENTINEL = object()
 
 
 def multiple_files_lines_iterator(paths: List[Union[str, Path]]) -> Iterator[str]:
-    def line_feeder(file_path: str, q: Queue):
-        for line in iter_lines(file_path):
-            q.put(line)
-        q.put(_SENTINEL)  # Sentinel to mark this file is done
+    def line_feeder(file_path: str, q: Queue, err_q: Queue):
+        try:
+            for line in iter_lines(file_path):
+                q.put(line)
+        except Exception as e:
+            err_q.put(e)
+        finally:
+            q.put(_SENTINEL)
 
     q = Queue()
+    err_q = Queue()
     num_files = len(paths)
     with ThreadPoolExecutor(max_workers=num_files) as executor:
         for file in paths:
-            executor.submit(line_feeder, file, q)
+            executor.submit(line_feeder, file, q, err_q)
 
         done_files = 0
         while done_files < num_files:
+            if not err_q.empty():
+                raise err_q.get()
+
             try:
                 item = q.get(timeout=0.01)
                 if item is _SENTINEL:
