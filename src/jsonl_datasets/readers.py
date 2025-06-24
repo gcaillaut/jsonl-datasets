@@ -15,7 +15,12 @@ def round_robin(*iterables: Iterator[str]) -> Iterator[str]:
 
 
 class JsonlDatasetReader:
-    def __init__(self, directory: Union[str, Path], read_strategy: str = "sequential"):
+    def __init__(
+        self,
+        directory: Union[str, Path],
+        read_strategy: str = "sequential",
+        skip_on_error: bool = False,
+    ):
         self.directory = Path(directory)
         if not self.directory.is_dir():
             raise ValueError(
@@ -29,6 +34,7 @@ class JsonlDatasetReader:
         if read_strategy not in {"sequential", "round_robin"}:
             raise ValueError("read_strategy must be 'sequential' or 'round_robin'")
         self.read_strategy = read_strategy
+        self.skip_on_error = skip_on_error
 
         self._len = None
 
@@ -45,7 +51,13 @@ class JsonlDatasetReader:
         else:
             raise ValueError(f"Invalid read_strategy: {self.read_strategy}")
 
-        yield from map(orjson.loads, lines_iter)
+        for line in lines_iter:
+            try:
+                item = orjson.loads(line)
+                yield item
+            except orjson.JSONDecodeError as e:
+                if not self.skip_on_error:
+                    raise e
 
     def __len__(self) -> int:
         """Return the number of JSON objects across all files, caching the result."""
