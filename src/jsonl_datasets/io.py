@@ -39,13 +39,13 @@ def multiple_files_lines_iterator(
         finally:
             q.put(_SENTINEL)
 
-    q = Queue()
-    err_q = Queue()
     num_files = len(paths)
     if max_workers == -1:
         max_workers = num_files
     else:
         max_workers = min(max_workers, num_files)
+    q = Queue(maxsize=10_000)
+    err_q = Queue(maxsize=max_workers)
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         for file in paths:
@@ -53,14 +53,13 @@ def multiple_files_lines_iterator(
 
         done_files = 0
         while done_files < num_files:
-            if not err_q.empty():
-                raise err_q.get()
-
             try:
-                item = q.get(timeout=0.01)
+                item = q.get(timeout=0.1)
                 if item is _SENTINEL:
                     done_files += 1
                 else:
                     yield item
             except Empty:
+                if not err_q.empty():
+                    raise err_q.get()
                 continue
