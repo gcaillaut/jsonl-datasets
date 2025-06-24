@@ -53,6 +53,19 @@ def test_iter_sequential():
         assert data == [{"a": 1}, {"a": 2}, {"b": 3}]
 
 
+def test_iter_parallel():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        file1 = os.path.join(tmpdir, "a.jsonl")
+        file2 = os.path.join(tmpdir, "b.jsonl")
+        create_jsonl_file(file1, [{"a": 1}, {"a": 2}])
+        create_jsonl_file(file2, [{"b": 3}])
+        reader = JsonlDatasetReader(tmpdir, read_strategy="parallel")
+        data = list(reader)
+        assert len(data) == 3
+        for x in [{"a": 1}, {"a": 2}, {"b": 3}]:
+            assert x in data
+
+
 def test_iter_round_robin():
     with tempfile.TemporaryDirectory() as tmpdir:
         file1 = os.path.join(tmpdir, "a.jsonl")

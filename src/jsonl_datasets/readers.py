@@ -3,7 +3,7 @@ import itertools
 from typing import Iterator, Union
 import orjson
 
-from jsonl_datasets.io import iter_lines
+from jsonl_datasets.io import iter_lines, multiple_files_lines_iterator
 
 
 def round_robin(*iterables: Iterator[str]) -> Iterator[str]:
@@ -18,7 +18,7 @@ class JsonlDatasetReader:
     def __init__(
         self,
         directory: Union[str, Path],
-        read_strategy: str = "sequential",
+        read_strategy: str = "parallel",
         skip_on_error: bool = False,
     ):
         self.directory = Path(directory)
@@ -31,8 +31,10 @@ class JsonlDatasetReader:
         if not self.files:
             raise FileNotFoundError(f"No .jsonl files found in '{self.directory}'.")
 
-        if read_strategy not in {"sequential", "round_robin"}:
-            raise ValueError("read_strategy must be 'sequential' or 'round_robin'")
+        if read_strategy not in {"sequential", "round_robin", "parallel"}:
+            raise ValueError(
+                "read_strategy must be 'parallel', 'sequential' or 'round_robin'"
+            )
         self.read_strategy = read_strategy
         self.skip_on_error = skip_on_error
 
@@ -48,6 +50,8 @@ class JsonlDatasetReader:
             lines_iter = itertools.chain.from_iterable(self._line_iterators())
         elif self.read_strategy == "round_robin":
             lines_iter = round_robin(*self._line_iterators())
+        elif self.read_strategy == "parallel":
+            lines_iter = multiple_files_lines_iterator(self.files)
         else:
             raise ValueError(f"Invalid read_strategy: {self.read_strategy}")
 

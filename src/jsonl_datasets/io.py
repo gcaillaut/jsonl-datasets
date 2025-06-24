@@ -1,6 +1,8 @@
 import gzip
 from pathlib import Path
-from typing import Iterator, Union
+from typing import Iterator, Union, List
+from concurrent.futures import ThreadPoolExecutor
+from queue import Queue, Empty
 
 
 def iter_lines(path: Union[str, Path]) -> Iterator[str]:
@@ -20,3 +22,30 @@ def iter_lines(path: Union[str, Path]) -> Iterator[str]:
 
     with open_f(path, mode, encoding=encoding) as f:
         yield from (line.rstrip("\n") for line in f)
+
+
+_SENTINEL = object()
+
+
+def multiple_files_lines_iterator(paths: List[Union[str, Path]]) -> Iterator[str]:
+    def line_feeder(file_path: str, q: Queue):
+        for line in iter_lines(file_path):
+            q.put(line)
+        q.put(_SENTINEL)  # Sentinel to mark this file is done
+
+    q = Queue()
+    num_files = len(paths)
+    with ThreadPoolExecutor(max_workers=num_files) as executor:
+        for file in paths:
+            executor.submit(line_feeder, file, q)
+
+        done_files = 0
+        while done_files < num_files:
+            try:
+                item = q.get(timeout=0.01)
+                if item is _SENTINEL:
+                    done_files += 1
+                else:
+                    yield item
+            except Empty:
+                continue
