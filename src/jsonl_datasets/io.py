@@ -27,7 +27,9 @@ def iter_lines(path: Union[str, Path]) -> Iterator[str]:
 _SENTINEL = object()
 
 
-def multiple_files_lines_iterator(paths: List[Union[str, Path]]) -> Iterator[str]:
+def multiple_files_lines_iterator(
+    paths: List[Union[str, Path]], max_workers=-1
+) -> Iterator[str]:
     def line_feeder(file_path: str, q: Queue, err_q: Queue):
         try:
             for line in iter_lines(file_path):
@@ -40,7 +42,12 @@ def multiple_files_lines_iterator(paths: List[Union[str, Path]]) -> Iterator[str
     q = Queue()
     err_q = Queue()
     num_files = len(paths)
-    with ThreadPoolExecutor(max_workers=num_files) as executor:
+    if max_workers == -1:
+        max_workers = num_files
+    else:
+        max_workers = min(max_workers, num_files)
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
         for file in paths:
             executor.submit(line_feeder, file, q, err_q)
 

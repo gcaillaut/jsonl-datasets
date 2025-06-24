@@ -20,6 +20,7 @@ class JsonlDatasetReader:
         directory: Union[str, Path],
         read_strategy: str = "parallel",
         skip_on_error: bool = False,
+        num_workers: int = -1,
     ):
         self.directory = Path(directory)
         if not self.directory.is_dir():
@@ -37,6 +38,7 @@ class JsonlDatasetReader:
             )
         self.read_strategy = read_strategy
         self.skip_on_error = skip_on_error
+        self.num_workers = num_workers
 
         self._len = None
 
@@ -51,7 +53,9 @@ class JsonlDatasetReader:
         elif self.read_strategy == "round_robin":
             lines_iter = round_robin(*self._line_iterators())
         elif self.read_strategy == "parallel":
-            lines_iter = multiple_files_lines_iterator(self.files)
+            lines_iter = multiple_files_lines_iterator(
+                self.files, max_workers=self.num_workers
+            )
         else:
             raise ValueError(f"Invalid read_strategy: {self.read_strategy}")
 
