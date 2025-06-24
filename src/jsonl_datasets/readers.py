@@ -28,7 +28,9 @@ class JsonlDatasetReader:
                 f"Provided path '{self.directory}' is not a valid directory."
             )
 
-        self.files = sorted(self.directory.glob("*.jsonl*"))  # sort for reproducibility
+        self.files = sorted(
+            self.directory.rglob("*.jsonl*")
+        )  # sort for reproducibility
         if not self.files:
             raise FileNotFoundError(f"No .jsonl files found in '{self.directory}'.")
 
