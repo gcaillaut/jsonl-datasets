@@ -3,6 +3,8 @@ from pathlib import Path
 from typing import Iterator, Union, List
 from concurrent.futures import ThreadPoolExecutor
 from queue import Queue, Empty
+import threading
+import os
 
 
 def iter_lines(path: Union[str, Path]) -> Iterator[str]:
@@ -24,42 +26,62 @@ def iter_lines(path: Union[str, Path]) -> Iterator[str]:
         yield from (line.rstrip("\n") for line in f)
 
 
-_SENTINEL = object()
+class ParallelLineIterator:
+    def __init__(self, paths, max_workers=-1, queue_size=10_000):
+        self.paths = paths
+        self.max_workers = max_workers
+        self.queue_size = queue_size
+        self.q = Queue(maxsize=queue_size)
+        self.err_q = Queue()
+        self.done_files = 0
+        self._stop_event = threading.Event()
+
+    def __iter__(self) -> Iterator[str]:
+        _SENTINEL = object()
+        num_files = len(self.paths)
+        max_workers = (
+            min(32, os.cpu_count(), num_files)
+            if self.max_workers == -1
+            else min(self.max_workers, num_files)
+        )
+
+        def line_feeder(file_path):
+            try:
+                for line in iter_lines(file_path):
+                    if self._stop_event.is_set():
+                        return
+                    self.q.put(line)
+            except Exception as e:
+                self.err_q.put(e)
+            finally:
+                self.q.put(_SENTINEL)
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            for path in self.paths:
+                executor.submit(line_feeder, path)
+
+            while self.done_files < num_files:
+                if not self.err_q.empty():
+                    raise self.err_q.get()
+
+                try:
+                    item = self.q.get(timeout=0.1)
+                    if item is _SENTINEL:
+                        self.done_files += 1
+                    else:
+                        yield item
+                except Empty:
+                    continue
+
+    def close(self):
+        self._stop_event.set()
 
 
 def multiple_files_lines_iterator(
     paths: List[Union[str, Path]], max_workers=-1
 ) -> Iterator[str]:
-    def line_feeder(file_path: str, q: Queue, err_q: Queue):
-        try:
-            for line in iter_lines(file_path):
-                q.put(line)
-        except Exception as e:
-            err_q.put(e)
-        finally:
-            q.put(_SENTINEL)
-
-    num_files = len(paths)
-    if max_workers == -1:
-        max_workers = num_files
-    else:
-        max_workers = min(max_workers, num_files)
-    q = Queue(maxsize=10_000)
-    err_q = Queue(maxsize=max_workers)
-
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        for file in paths:
-            executor.submit(line_feeder, file, q, err_q)
-
-        done_files = 0
-        while done_files < num_files:
-            try:
-                item = q.get(timeout=0.1)
-                if item is _SENTINEL:
-                    done_files += 1
-                else:
-                    yield item
-            except Empty:
-                if not err_q.empty():
-                    raise err_q.get()
-                continue
+    it = ParallelLineIterator(paths, max_workers)
+    try:
+        yield from it
+    finally:
+        it.close()
