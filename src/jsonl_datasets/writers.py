@@ -82,6 +82,10 @@ class JsonlDatasetWriter:
         self.current_shard_file.write(orjson.dumps(item))
         self.num_samples += 1
 
+    def flush(self):
+        if self.current_shard_file:
+            self.current_shard_file.flush()
+
     def close(self):
         """Close the current open shard file."""
         if self.current_shard_file:
